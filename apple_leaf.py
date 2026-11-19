@@ -56,7 +56,10 @@ def seed_everything(seed: int):
 
 
 def stem_to_key(stem: str) -> str:
-    """'student_b0_kd' -> 'student_b0'"""
+    """Resolve a run stem such as 'student_b0_kd' to its backbone key."""
+    for key in sorted(BACKBONES, key=len, reverse=True):
+        if stem == key or stem.startswith(key + "_"):
+            return key
     return stem.replace("_kd", "")
 
 
@@ -231,7 +234,7 @@ def cmd_train(a):
                        num_workers=a.workers, pin_memory=True, drop_last=True)
     va_dl = DataLoader(va_ds, a.bs * 2, shuffle=False, num_workers=a.workers, pin_memory=True)
 
-    model = build_model(a.model).to(device)
+    model = build_model(a.model, pretrained=not a.no_pretrained).to(device)
     teachers = []
     for t in a.teachers or []:
         tm = build_model(stem_to_key(t), pretrained=False)
@@ -416,6 +419,8 @@ def main():
     s.add_argument("--balanced_sampler", action="store_true")
     s.add_argument("--canny_aug", action="store_true")
     s.add_argument("--limit", type=int, default=0, help="use N train images only (smoke test)")
+    s.add_argument("--no_pretrained", action="store_true",
+                   help="initialize without downloading pretrained weights (for offline smoke tests)")
     s.add_argument("--teachers", nargs="*", help="run stems of trained teachers for distillation")
     s.add_argument("--alpha", type=float, default=0.7, help="weight of the KD loss")
     s.add_argument("--temp", type=float, default=2.0, help="KD temperature")
