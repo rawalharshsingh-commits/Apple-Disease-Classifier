@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.py[cod]
+outputs/
+tests/fake_data/
+.DS_Store
