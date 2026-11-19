@@ -2,5 +2,6 @@
 __pycache__/
 *.py[cod]
 outputs/
-tests/fake_data/
+data/
+*.zip
 .DS_Store
