@@ -65,11 +65,19 @@ def build_model(key: str, pretrained: bool = True) -> nn.Module:
     try:
         return timm.create_model(name, pretrained=pretrained, num_classes=len(CLASSES))
     except Exception as e:  # missing tag / no internet / version mismatch
-        avail = timm.list_pretrained("*efficientnet_b7*")
+        detail = ""
+        if "efficientnet_b7" in name:
+            try:
+                avail = timm.list_pretrained("*efficientnet_b7*")
+                detail = f"\nAvailable EfficientNet-B7 tags in your timm version: {avail}"
+            except Exception:
+                # Preserve the original model creation error if this timm version
+                # does not expose list_pretrained or its registry is unavailable.
+                pass
         raise SystemExit(
             f"Could not create '{name}' ({e}).\n"
-            f"Available EfficientNet-B7 tags in your timm version: {avail}\n"
-            f"Edit BACKBONES at the top of this file to use one of them."
+            f"{detail}\n"
+            f"Check the model name, timm version, and pretrained-weight access."
         )
 
 
@@ -192,7 +200,7 @@ def predict(model, loader, device, amp):
     out = []
     for x, _ in loader:
         x = x.to(device, non_blocking=True)
-        with torch.autocast(device_type="cuda", enabled=amp):
+        with torch.autocast(device_type=device, enabled=amp):
             out.append(F.softmax(model(x).float(), 1).cpu())
     return torch.cat(out).numpy()
 
@@ -248,7 +256,12 @@ def cmd_train(a):
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: (s + 1) / warm if s < warm
         else 0.5 * (1 + math.cos(math.pi * (s - warm) / max(total - warm, 1))))
-    scaler = torch.cuda.amp.GradScaler(enabled=amp)
+    # The device argument was added to torch.amp.GradScaler after the minimum
+    # supported PyTorch version (2.1); keep both signatures working.
+    try:
+        scaler = torch.amp.GradScaler("cuda", enabled=amp)
+    except TypeError:
+        scaler = torch.cuda.amp.GradScaler(enabled=amp)
 
     best, bad, history = -1.0, 0, []
     for ep in range(a.epochs):
@@ -257,7 +270,7 @@ def cmd_train(a):
         opt.zero_grad(set_to_none=True)
         for i, (x, y) in enumerate(tqdm(tr_dl, desc=f"epoch {ep + 1}/{a.epochs}", leave=False)):
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-            with torch.autocast(device_type="cuda", enabled=amp):
+            with torch.autocast(device_type=device, enabled=amp):
                 logits = model(x)
                 loss = crit(logits.float(), y)
                 if teachers:
